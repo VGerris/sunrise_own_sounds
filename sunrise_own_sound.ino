@@ -37,10 +37,10 @@ boolean needToSaveAL2       = false;
 #define KEY_INCR       1 << 7
 
 struct SettingsStruct {
-  unsigned short  al1_hour;
-  unsigned short  al1_minute;
-  unsigned short  al2_hour;
-  unsigned short  al2_minute;
+  int al1_hour;
+  int al1_minute;
+  int al2_hour;
+  int al2_minute;
   int al1_days[7];
   int al2_days[7];
 
@@ -181,19 +181,8 @@ void setup()
   //Serial so you can read and report the time and alarm.
   Serial.begin(9600);
   
-  //read the stored alarm1 time.
+  //read the stored alarms
   read_settings();
-  
-  //al1_hour = EEPROM.read(0);
-  //al1_minute = EEPROM.read(1);
-  //days_to_alarm1[0] = EEPROM.read(2);
-  //days_to_alarm1[1] = EEPROM.read(3);
-  //days_to_alarm1[2] = EEPROM.read(4);
-  //days_to_alarm1[3] = EEPROM.read(5);
-  //days_to_alarm1[4] = EEPROM.read(6);
-  //days_to_alarm1[5] = EEPROM.read(7);
-  //days_to_alarm1[6] = EEPROM.read(8);
-
 
   //Set up the shiftPWM constants
   ShiftPWM.SetAmountOfRegisters(numRegisters);
@@ -258,7 +247,7 @@ void loop()
   }  
   
   // keys  int userAction = menuButton.checkButton();
-  if (keys & KEY_AL1 || keys & KEY_AL2 || keys & KEY_TIME || keys & KEY_DATE)
+  if (keys & KEY_AL1 || (keys & KEY_AL2 || keys & KEY_TIME || keys & KEY_DATE) && crtState!=STATE_SET_AL1_DAYS && crtState!=STATE_SET_AL2_DAYS)
   {
     // MENU button was pressed;
     timeOfLastInput = millis();        // record the time;
@@ -274,10 +263,9 @@ void loop()
     {
       //userAction = plusButton.checkButton();
       //if (userAction != NO_ACTION)
-      if (keys & KEY_INCR || keys & KEY_DECR)
+      if (keys & KEY_AL2 || keys & KEY_TIME || keys & KEY_DATE || keys & KEY_HOUR || keys & KEY_MIN || keys & KEY_DECR ||keys & KEY_INCR )
       {
         timeOfLastInput = millis();    // record the last time a button was pushed;
-
         processPlusButton(keys); // change the machine state;
       }
     }
@@ -314,10 +302,7 @@ void loop()
   }
  */
   command = 0;                 // reset command 
-  delay(100);
-  
-  
-  
+  delay(100);   
 }
 
 //*********************************************************************************************************
@@ -326,7 +311,7 @@ void loop()
 void processMenuButton(byte keys)
 {
 #ifdef _DEBUG_
-  Serial.println("Pressed MENU button");
+  Serial.println("Pressed main button");
 #endif  
 
   restore_display();
@@ -392,7 +377,7 @@ void processMenuButton(byte keys)
       break;
       
     case STATE_SET_AL2_DAYS:
-      if (keys & KEY_AL2)
+      if (keys & KEY_AL1)
       {
         crtState = STATE_SET_AL2_HOUR;
       }
@@ -445,7 +430,7 @@ void processMenuButton(byte keys)
 void processPlusButton(char keys)
 {
 #ifdef _DEBUG_
-  Serial.println("Pressed PLUS button");
+  Serial.println("Pressed alter button");
 #endif  
 
   switch (crtState)
@@ -495,6 +480,13 @@ void processPlusButton(char keys)
       break;
       
     case STATE_SET_AL1_DAYS:
+      if (keys & KEY_AL2) settings.al1_days[0]=changeDayState(settings.al1_days[0]);
+      if (keys & KEY_TIME) settings.al1_days[1]=changeDayState(settings.al1_days[1]);
+      if (keys & KEY_DATE) settings.al1_days[2]=changeDayState(settings.al1_days[2]);
+      if (keys & KEY_HOUR) settings.al1_days[3]=changeDayState(settings.al1_days[3]);
+      if (keys & KEY_MIN) settings.al1_days[4]=changeDayState(settings.al1_days[4]);
+      if (keys & KEY_DECR) settings.al1_days[5]=changeDayState(settings.al1_days[5]);
+      if (keys & KEY_INCR) settings.al1_days[6]=changeDayState(settings.al1_days[6]);
       // LEDS on off for days
       break;      
       
@@ -521,6 +513,13 @@ void processPlusButton(char keys)
       break;
       
     case STATE_SET_AL2_DAYS:
+      if (keys & KEY_AL2) settings.al2_days[0]=changeDayState(settings.al2_days[0]);
+      if (keys & KEY_TIME) settings.al2_days[1]=changeDayState(settings.al2_days[1]);
+      if (keys & KEY_DATE) settings.al2_days[2]=changeDayState(settings.al2_days[2]);
+      if (keys & KEY_HOUR) settings.al2_days[3]=changeDayState(settings.al2_days[3]);
+      if (keys & KEY_MIN) settings.al2_days[4]=changeDayState(settings.al2_days[4]);
+      if (keys & KEY_DECR) settings.al2_days[5]=changeDayState(settings.al2_days[5]);
+      if (keys & KEY_INCR) settings.al2_days[6]=changeDayState(settings.al2_days[6]);
       // LEDS on off for days
       break; 
 
@@ -603,6 +602,9 @@ void ExecuteState()
       
       getDateDs1307(); //sets the global date/time constants
       display_text(txt_buffer);
+      for (i=0;i < 8;i++)
+        display.setLED(TM1638_COLOR_NONE, i);
+
       //displayCurrentTime();
       break;
 
@@ -622,12 +624,19 @@ void ExecuteState()
 	displayTimeBlink(settings.al1_hour, settings.al1_minute, 1);
       break;
       
+    case STATE_SET_AL1_DAYS:
+        displayAlarmDays(settings.al1_days);
+      break;
+      
     case STATE_SET_AL2_HOUR:
 	  displayTimeBlink(settings.al2_hour, settings.al2_minute, 0);
       break;
 
     case STATE_SET_AL2_MIN:
 	  displayTimeBlink(settings.al2_hour, settings.al2_minute, 1);
+      break;
+    case STATE_SET_AL2_DAYS:
+          displayAlarmDays(settings.al2_days);
       break;
 
     case STATE_SET_DATE_YEAR:
@@ -660,7 +669,23 @@ void alarm_go()
       }
       delay(time_between_up);
     }
-  }  
+  }
+    for (int t=0;t<10;t++)
+    {
+      for (i = 0; i < 7; i++)
+       display.setLED(TM1638_COLOR_GREEN, i);
+      delay (500);
+      for (i = 0; i < 7; i++)
+       display.setLED(TM1638_COLOR_RED, i);
+       delay(500);
+      for (i = 0; i < 7; i++)
+       display.setLED(TM1638_COLOR_GREEN, i);
+      delay(500);
+    }
+       
+      
+ 
+  
 }
   
 // Convert normal decimal numbers to binary coded decimal
@@ -673,6 +698,13 @@ byte decToBcd(byte val)
 byte bcdToDec(byte val)
 {
   return ( (val/16*10) + (val%16) );
+}
+
+int changeDayState(int state)
+{
+  if (state != 1)
+    return 1;
+  else return 0;
 }
 
 
@@ -824,50 +856,14 @@ void displayDayBlink()
         display_text(buffer);    
 }
 
-void setAlarm1()
-{
-   settings.al1_minute = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-         Serial.print(settings.al1_minute);
-
-   settings.al1_hour  = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-   settings.al1_days[0]  = (byte)  (Serial.read() - 48);
-   settings.al1_days[1]  = (byte)  (Serial.read() - 48);
-   settings.al1_days[2]  = (byte)  (Serial.read() - 48);
-   settings.al1_days[3]  = (byte)  (Serial.read() - 48);
-   settings.al1_days[4]  = (byte)  (Serial.read() - 48);
-   settings.al1_days[5]  = (byte)  (Serial.read() - 48);
-   settings.al1_days[6]  = (byte)  (Serial.read() - 48);
-   EEPROM.write(0,settings.al1_hour);
-   EEPROM.write(1,settings.al1_minute);
-   EEPROM.write(2,settings.al1_days[0]);
-   EEPROM.write(3,settings.al1_days[1]);
-   EEPROM.write(4,settings.al1_days[2]);
-   EEPROM.write(5,settings.al1_days[3]);
-   EEPROM.write(6,settings.al1_days[4]);
-   EEPROM.write(7,settings.al1_days[5]);
-   EEPROM.write(8,settings.al1_days[6]);
-   
+void displayAlarmDays(int status[7])
+{  
+    for (i = 0; i < 7; i++)
+      if (status[i] ==1)
+        display.setLED(TM1638_COLOR_GREEN, i+1);
+      else display.setLED(TM1638_COLOR_RED, i+1);
+        
+  // led red green
 }
 
-void setAlarm2()
-{
-   settings.al2_minute = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-   settings.al2_hour  = (byte) ((Serial.read() - 48) *10 +  (Serial.read() - 48));
-   settings.al2_days[0]  = (byte)  (Serial.read() - 48);
-   settings.al2_days[1]  = (byte)  (Serial.read() - 48);
-   settings.al2_days[2]  = (byte)  (Serial.read() - 48);
-   settings.al2_days[3]  = (byte)  (Serial.read() - 48);
-   settings.al2_days[4]  = (byte)  (Serial.read() - 48);
-   settings.al2_days[5]  = (byte)  (Serial.read() - 48);
-   settings.al2_days[6]  = (byte)  (Serial.read() - 48);
-   EEPROM.write(9,settings.al2_hour);
-   EEPROM.write(10,settings.al2_minute);
-   EEPROM.write(11,settings.al2_days[0]);
-   EEPROM.write(12,settings.al2_days[1]);
-   EEPROM.write(13,settings.al2_days[2]);
-   EEPROM.write(14,settings.al2_days[3]);
-   EEPROM.write(15,settings.al2_days[4]);
-   EEPROM.write(16,settings.al2_days[5]);
-   EEPROM.write(17,settings.al2_days[6]);
-   
-}
+
